@@ -5,7 +5,7 @@ Dendrite turns your Obsidian vault into a living knowledge graph. Each note is a
 ## Features
 
 - **Canvas-based mind map** — Uses Obsidian's native Canvas for spatial visualization
-- **AI-generated content** — Each zettel gets a subtitle, dense body text, and expansion suggestions via OpenAI
+- **AI-generated content** — Each zettel gets a subtitle, dense body text, and expansion suggestions via OpenAI (default: GPT-5.2)
 - **Suggestions in frontmatter** — Stored as YAML arrays, accessible from context menus and the expand modal
 - **Click-to-create** — Click any `[[unresolved link]]` in a dendrite note to auto-create a new zettel with AI content
 - **Context menu integration** — Right-click any node in the file explorer to see suggestions and expand
@@ -53,12 +53,12 @@ bullet lists, or multiple paragraphs as the content demands.
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| OpenAI API Key | Your API key for content generation | (empty — mock mode) |
-| OpenAI Model | Which model to use | gpt-4.1-mini |
+| OpenAI API Key | Your API key for content generation | *(empty — mock mode)* |
+| OpenAI Model | Which model to use | GPT-5.2 |
 | Root folder | Base folder for all Dendrite files | Dendrite |
 | Nodes folder | Subfolder for zettel notes (within root) | Nodes |
 | Canvas name | Name of the canvas file (within root) | Knowledge Map |
-| Mission | Guiding mission used as LLM context | Grow holistically... |
+| Mission | Guiding mission used as LLM context | *Grow holistically...* |
 
 ## Development
 
@@ -69,6 +69,10 @@ npm run dev     # watch mode, outputs to vault plugin folder
 npm run build   # production build
 ```
 
+## Author
+
+**Igor Krbavcic** — [github.com/ekoori](https://github.com/ekoori)
+
 ## License
 
-MIT
+[MIT](LICENSE)

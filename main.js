@@ -822,7 +822,7 @@ var DendriteSettingTab = class extends import_obsidian2.PluginSettingTab {
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian2.Setting(containerEl).setName("OpenAI Model").setDesc("Which model to use. GPT-4.1 Mini is recommended for speed and cost. GPT-5.4 for highest quality.").addDropdown((d) => {
+    new import_obsidian2.Setting(containerEl).setName("OpenAI Model").setDesc("Which model to use. GPT-5.2 is recommended as default. GPT-5.4 for highest quality.").addDropdown((d) => {
       for (const m of OPENAI_MODELS) d.addOption(m.value, m.label);
       d.setValue(this.plugin.settings.openaiModel).onChange(async (v) => {
         this.plugin.settings.openaiModel = v;
