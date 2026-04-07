@@ -1,0 +1,10 @@
+{
+  "id": "dendrite",
+  "name": "Dendrite",
+  "version": "0.2.0",
+  "minAppVersion": "1.5.0",
+  "description": "AI-powered knowledge mind mapping. Grow your knowledge graph with LLM-suggested expansion directions, auto-generated zettel notes, and an infinite canvas.",
+  "author": "Igor",
+  "authorUrl": "https://github.com/igor",
+  "isDesktopOnly": false
+}

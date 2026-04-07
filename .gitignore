@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output (generated files go to vault plugin folder)
+main.js
+*.js.map
+
+# Obsidian plugin data (contains API keys!)
+data.json
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# npm
+npm-debug.log*
