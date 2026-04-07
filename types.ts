@@ -46,18 +46,18 @@ export const DEFAULT_SETTINGS: DendriteSettings = {
   canvasName: "Knowledge Map",
   mission: "Grow your knowledge and personhood holistically — from physical to spiritual dimensions.",
   openaiApiKey: "",
-  openaiModel: "gpt-4.1-mini",
+  openaiModel: "gpt-5.2",
 };
 
 export const OPENAI_MODELS: { value: string; label: string }[] = [
   { value: "gpt-5.4", label: "GPT-5.4 (flagship)" },
   { value: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
   { value: "gpt-5.4-nano", label: "GPT-5.4 Nano" },
-  { value: "gpt-5.2", label: "GPT-5.2" },
+  { value: "gpt-5.2", label: "GPT-5.2 (recommended)" },
   { value: "gpt-5-mini", label: "GPT-5 Mini" },
   { value: "gpt-5-nano", label: "GPT-5 Nano" },
   { value: "gpt-4.1", label: "GPT-4.1" },
-  { value: "gpt-4.1-mini", label: "GPT-4.1 Mini (recommended)" },
+  { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
   { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
   { value: "gpt-4o", label: "GPT-4o (legacy)" },
   { value: "gpt-4o-mini", label: "GPT-4o Mini (legacy)" },

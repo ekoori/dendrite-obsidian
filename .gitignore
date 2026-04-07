@@ -1,10 +1,6 @@
 # Dependencies
 node_modules/
 
-# Build output (generated files go to vault plugin folder)
-main.js
-*.js.map
-
 # Obsidian plugin data (contains API keys!)
 data.json
 
