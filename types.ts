@@ -3,7 +3,6 @@ export interface CanvasNode {
   type: "text" | "file" | "link" | "group";
   x: number; y: number; width: number; height: number;
   color?: string; text?: string; file?: string;
-  [key: string]: any;
 }
 
 export interface CanvasEdge {
@@ -12,12 +11,11 @@ export interface CanvasEdge {
   fromSide?: string; toSide?: string;
   fromEnd?: string; toEnd?: string;
   color?: string; label?: string;
-  [key: string]: any;
 }
 
 export interface CanvasData {
-  nodes: CanvasNode[]; edges: CanvasEdge[];
-  [key: string]: any;
+  nodes: CanvasNode[];
+  edges: CanvasEdge[];
 }
 
 export interface Suggestion {

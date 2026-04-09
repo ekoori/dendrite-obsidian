@@ -10,7 +10,7 @@ import { generateSuggestionsAI, generateZettelAI } from "./openai";
 function generateId(): string { return Math.random().toString(36).substring(2, 18); }
 
 // ═══════════════════════════════════════════════════════════════════
-// Frontmatter Helpers
+// Frontmatter helpers
 // ═══════════════════════════════════════════════════════════════════
 
 function parseSuggestionsFromFrontmatter(content: string): Suggestion[] {
@@ -112,20 +112,21 @@ class SuggestionModal extends Modal {
 
     const actionsDiv = contentEl.createDiv({ cls: "dendrite-actions" });
     if (this.plugin.hasApiKey) {
-      const genBtn = actionsDiv.createEl("button", { text: "✨ Generate new AI suggestions", cls: "dendrite-action-btn" });
-      genBtn.addEventListener("click", async () => {
+      const genBtn = actionsDiv.createEl("button", { text: "Generate new AI suggestions", cls: "dendrite-action-btn" });
+      genBtn.addEventListener("click", () => {
         genBtn.disabled = true; genBtn.setText("Generating...");
-        try {
-          const newSugs = await generateSuggestionsAI(this.plugin.app, this.plugin.settings, this.nodeTitle);
-          await this.plugin.mergeSuggestionsIntoFile(this.nodeTitle, newSugs);
-          for (const s of newSugs) {
-            if (!existingSugs.some(e => e.title.toLowerCase() === s.title.toLowerCase())) {
-              this.addSuggestionBtn(s); existingSugs.push(s);
+        generateSuggestionsAI(this.plugin.app, this.plugin.settings, this.nodeTitle)
+          .then(async (newSugs) => {
+            await this.plugin.mergeSuggestionsIntoFile(this.nodeTitle, newSugs);
+            for (const s of newSugs) {
+              if (!existingSugs.some(e => e.title.toLowerCase() === s.title.toLowerCase())) {
+                this.addSuggestionBtn(s); existingSugs.push(s);
+              }
             }
-          }
-          genBtn.setText("✨ Generate more");
-        } catch (err: any) { genBtn.setText(`Error: ${err.message}`); }
-        genBtn.disabled = false;
+            genBtn.setText("Generate more");
+          })
+          .catch((err: Error) => { genBtn.setText(`Error: ${err.message}`); })
+          .finally(() => { genBtn.disabled = false; });
       });
     }
 
@@ -154,15 +155,21 @@ class SuggestionModal extends Modal {
 }
 
 class CustomDirectionModal extends Modal {
-  private nodeTitle: string; private onSubmit: (s: Suggestion) => void;
+  private nodeTitle: string;
+  private onSubmit: (s: Suggestion) => void;
+
   constructor(app: App, nodeTitle: string, onSubmit: (s: Suggestion) => void) {
     super(app); this.nodeTitle = nodeTitle; this.onSubmit = onSubmit;
   }
+
   onOpen() {
-    const { contentEl } = this; contentEl.empty(); contentEl.addClass("dendrite-modal");
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("dendrite-modal");
     contentEl.createEl("h3", { text: `Custom direction from "${this.nodeTitle}"` });
     const input = contentEl.createEl("input", { type: "text", placeholder: "Type and press Enter..." });
-    input.addClass("dendrite-custom-input"); input.style.width = "100%"; input.style.marginTop = "8px"; input.focus();
+    input.addClasses(["dendrite-custom-input", "dendrite-custom-input-full"]);
+    input.focus();
     input.addEventListener("keydown", (e: KeyboardEvent) => {
       if (e.key === "Enter" && input.value.trim()) {
         this.onSubmit({ title: input.value.trim(), subtitle: "User-directed exploration." }); this.close();
@@ -170,16 +177,23 @@ class CustomDirectionModal extends Modal {
       if (e.key === "Escape") this.close();
     });
   }
+
   onClose() { this.contentEl.empty(); }
 }
 
 class NodePickerModal extends Modal {
-  private nodes: CanvasNode[]; private plugin: DendritePlugin; private onPick: (node: CanvasNode) => void;
+  private nodes: CanvasNode[];
+  private plugin: DendritePlugin;
+  private onPick: (node: CanvasNode) => void;
+
   constructor(app: App, nodes: CanvasNode[], plugin: DendritePlugin, onPick: (node: CanvasNode) => void) {
     super(app); this.nodes = nodes; this.plugin = plugin; this.onPick = onPick;
   }
+
   onOpen() {
-    const { contentEl } = this; contentEl.empty(); contentEl.addClass("dendrite-modal");
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("dendrite-modal");
     contentEl.createEl("h2", { text: "Choose a node to expand" });
     const listEl = contentEl.createDiv({ cls: "dendrite-suggestions" });
     for (const node of this.nodes) {
@@ -189,11 +203,12 @@ class NodePickerModal extends Modal {
       btn.addEventListener("click", () => { this.onPick(node); this.close(); });
     }
   }
+
   onClose() { this.contentEl.empty(); }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Main Plugin
+// Main plugin
 // ═══════════════════════════════════════════════════════════════════
 
 export default class DendritePlugin extends Plugin {
@@ -216,22 +231,23 @@ export default class DendritePlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
-    this.addCommand({ id: "dendrite-init", name: "Initialize knowledge map", callback: () => this.initializeMap() });
-    this.addCommand({ id: "dendrite-expand", name: "Expand selected node", callback: () => this.expandSelectedNode() });
-    this.addRibbonIcon("brain", "Dendrite: Expand node", () => this.expandSelectedNode());
+    // Command IDs without plugin prefix per Obsidian guidelines
+    this.addCommand({ id: "init", name: "Initialize knowledge map", callback: () => { void this.initializeMap(); } });
+    this.addCommand({ id: "expand", name: "Expand selected node", callback: () => { void this.expandSelectedNode(); } });
+    this.addRibbonIcon("brain", "Dendrite: expand node", () => { void this.expandSelectedNode(); });
     this.addSettingTab(new DendriteSettingTab(this.app, this));
 
     // Cache suggestions on file change
     this.registerEvent(this.app.vault.on("modify", (file: TAbstractFile) => {
       if (file instanceof TFile && file.path.startsWith(this.nodesBasePath + "/")) {
-        this.cacheSuggestionsForFile(file);
+        void this.cacheSuggestionsForFile(file);
       }
     }));
 
     // Cache all on startup
-    this.app.workspace.onLayoutReady(() => this.cacheAllSuggestions());
+    this.app.workspace.onLayoutReady(() => { void this.cacheAllSuggestions(); });
 
-    // Context menu (SYNC — uses cache)
+    // Context menu (sync — uses cache)
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu: Menu, file: TAbstractFile) => {
         if (!(file instanceof TFile) || file.extension !== "md") return;
@@ -240,24 +256,24 @@ export default class DendritePlugin extends Plugin {
         const cached = this.suggestionsCache.get(file.path) || [];
 
         menu.addItem((item: MenuItem) => {
-          item.setTitle("Dendrite: Expand node").setIcon("brain");
-          const submenu = (item as any).setSubmenu() as Menu;
+          item.setTitle("Dendrite: expand node").setIcon("brain");
+          const submenu = (item as MenuItem & { setSubmenu: () => Menu }).setSubmenu();
           if (cached.length > 0) {
             for (const s of cached) {
               submenu.addItem((sub: MenuItem) => {
                 sub.setTitle(`${s.title} — ${s.subtitle}`)
-                  .onClick(() => this.handleSuggestionClick(file, s));
+                  .onClick(() => { void this.handleSuggestionClick(file, s); });
               });
             }
             submenu.addSeparator();
           }
           submenu.addItem((sub: MenuItem) => {
-            sub.setTitle("✨ Generate new AI suggestions...").setIcon("sparkles")
-              .onClick(() => this.expandNodeByFile(file));
+            sub.setTitle("Generate new AI suggestions...").setIcon("sparkles")
+              .onClick(() => { this.expandNodeByFile(file); });
           });
           submenu.addItem((sub: MenuItem) => {
-            sub.setTitle("✎ Write your own direction...")
-              .onClick(() => new CustomDirectionModal(this.app, title, (chosen) => this.handleSuggestionClick(file, chosen)).open());
+            sub.setTitle("Write your own direction...")
+              .onClick(() => { new CustomDirectionModal(this.app, title, (chosen) => { void this.handleSuggestionClick(file, chosen); }).open(); });
           });
         });
       })
@@ -270,12 +286,11 @@ export default class DendritePlugin extends Plugin {
         await new Promise(r => setTimeout(r, 300));
 
         let content: string;
-        try { content = await this.app.vault.read(file); } catch { return; }
+        try { content = await this.app.vault.read(file); } catch (_e) { /* file unreadable */ return; }
         if (content.trim().length > 0) return;
 
         const title = file.basename;
 
-        // Check if linked from any dendrite note
         let parentTitle = "";
         let isLinkedFromDendrite = false;
         for (const f of this.app.vault.getMarkdownFiles()) {
@@ -285,17 +300,15 @@ export default class DendritePlugin extends Plugin {
             const c = await this.app.vault.read(f);
             if (!hasDendriteTag(c)) continue;
             if (c.includes(`[[${title}]]`)) { parentTitle = f.basename; isLinkedFromDendrite = true; break; }
-          } catch { continue; }
+          } catch (_e) { /* skip unreadable */ continue; }
         }
 
         if (!isLinkedFromDendrite && !file.path.startsWith(this.nodesBasePath + "/")) return;
 
-        // Move to Nodes folder if created elsewhere
         let targetFile = file;
         if (!file.path.startsWith(this.nodesBasePath + "/")) {
           const targetPath = this.notePath(title);
           if (!this.app.vault.getAbstractFileByPath(targetPath)) {
-            // Ensure nodes folder exists
             const folder = this.app.vault.getAbstractFileByPath(this.nodesBasePath);
             if (!folder) await this.app.vault.createFolder(this.nodesBasePath);
             await this.app.fileManager.renameFile(file, targetPath);
@@ -305,22 +318,22 @@ export default class DendritePlugin extends Plugin {
           }
         }
 
-        // Populate with content
         try {
           if (this.hasApiKey) {
-            new Notice(`Dendrite: Generating "${title}"...`);
+            new Notice(`Dendrite: generating "${title}"...`);
             const zettel = await generateZettelAI(this.app, this.settings, title, parentTitle, "");
             await this.app.vault.modify(targetFile, buildZettelContent(title, zettel.subtitle, zettel.body, zettel.suggestions));
           } else {
             await this.app.vault.modify(targetFile, buildZettelContent(title, `Expand on: ${title}`, "", getMockSuggestions(title)));
           }
-        } catch (err: any) {
-          new Notice(`Dendrite: AI error — ${err.message}`);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          new Notice(`Dendrite: AI error — ${msg}`);
           await this.app.vault.modify(targetFile, buildZettelContent(title, `Expand on: ${title}`, "", getMockSuggestions(title)));
         }
         await this.addFileToCanvasIfMissing(targetFile, title);
-        this.cacheSuggestionsForFile(targetFile);
-        new Notice(`Dendrite: Created "${title}".`);
+        await this.cacheSuggestionsForFile(targetFile);
+        new Notice(`Dendrite: created "${title}".`);
       })
     );
   }
@@ -329,19 +342,19 @@ export default class DendritePlugin extends Plugin {
     this.suggestionsCache.clear();
   }
 
-  // ─── Suggestions Cache ─────────────────────────────────────────
-  async cacheAllSuggestions() {
+  // ─── Suggestions cache ─────────────────────────────────────────
+  async cacheAllSuggestions(): Promise<void> {
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!file.path.startsWith(this.nodesBasePath + "/")) continue;
       await this.cacheSuggestionsForFile(file);
     }
   }
 
-  async cacheSuggestionsForFile(file: TFile) {
+  async cacheSuggestionsForFile(file: TFile): Promise<void> {
     try {
       const content = await this.app.vault.read(file);
       this.suggestionsCache.set(file.path, parseSuggestionsFromFrontmatter(content));
-    } catch {}
+    } catch (_e) { /* skip unreadable files */ }
   }
 
   async getExistingSuggestions(nodeTitle: string): Promise<Suggestion[]> {
@@ -352,7 +365,7 @@ export default class DendritePlugin extends Plugin {
     return parseSuggestionsFromFrontmatter(content);
   }
 
-  async mergeSuggestionsIntoFile(nodeTitle: string, newSugs: Suggestion[]) {
+  async mergeSuggestionsIntoFile(nodeTitle: string, newSugs: Suggestion[]): Promise<void> {
     const path = this.notePath(nodeTitle);
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) return;
@@ -368,38 +381,40 @@ export default class DendritePlugin extends Plugin {
   }
 
   // ─── Actions ───────────────────────────────────────────────────
-  async handleSuggestionClick(file: TFile, suggestion: Suggestion) {
+  async handleSuggestionClick(file: TFile, suggestion: Suggestion): Promise<void> {
     const result = await this.readCanvas(); if (!result) return;
     const node = result.data.nodes.find(n => n.type === "file" && n.file === file.path);
     if (node) await this.addNodeToCanvas(node, suggestion, result.file, result.data);
     else await this.createAndAddOrphan(file, suggestion);
   }
 
-  async expandNodeByFile(file: TFile) {
-    new SuggestionModal(this.app, file.basename, this, async (chosen) => {
-      const r = await this.readCanvas(); if (!r) return;
-      const fn = r.data.nodes.find(n => n.type === "file" && n.file === file.path);
-      if (fn) await this.addNodeToCanvas(fn, chosen, r.file, r.data);
-      else await this.createAndAddOrphan(file, chosen);
+  expandNodeByFile(file: TFile): void {
+    new SuggestionModal(this.app, file.basename, this, (chosen) => {
+      void this.readCanvas().then(async (r) => {
+        if (!r) return;
+        const fn = r.data.nodes.find(n => n.type === "file" && n.file === file.path);
+        if (fn) await this.addNodeToCanvas(fn, chosen, r.file, r.data);
+        else await this.createAndAddOrphan(file, chosen);
+      });
     }).open();
   }
 
-  async expandSelectedNode() {
+  async expandSelectedNode(): Promise<void> {
     const r = await this.readCanvas(); if (!r) return;
     const an = this.findActiveNodeInCanvas(r.data);
-    if (!an) { new NodePickerModal(this.app, r.data.nodes, this, n => this.showSuggestionsForNode(n, r.file, r.data)).open(); return; }
+    if (!an) { new NodePickerModal(this.app, r.data.nodes, this, n => { this.showSuggestionsForNode(n, r.file, r.data); }).open(); return; }
     this.showSuggestionsForNode(an, r.file, r.data);
   }
 
-  showSuggestionsForNode(node: CanvasNode, cf: TFile, cd: CanvasData) {
-    new SuggestionModal(this.app, this.getNodeTitle(node), this, async (chosen) => {
-      await this.addNodeToCanvas(node, chosen, cf, cd);
+  showSuggestionsForNode(node: CanvasNode, cf: TFile, cd: CanvasData): void {
+    new SuggestionModal(this.app, this.getNodeTitle(node), this, (chosen) => {
+      void this.addNodeToCanvas(node, chosen, cf, cd);
     }).open();
   }
 
   // ─── Settings ──────────────────────────────────────────────────
-  async loadSettings() { this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()); }
-  async saveSettings() { await this.saveData(this.settings); }
+  async loadSettings(): Promise<void> { this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()); }
+  async saveSettings(): Promise<void> { await this.saveData(this.settings); }
 
   // ─── Zettel CRUD ───────────────────────────────────────────────
   async createZettel(title: string, subtitle: string, body: string, suggestions: Suggestion[], parentTitle?: string): Promise<TFile> {
@@ -407,7 +422,6 @@ export default class DendritePlugin extends Plugin {
     const existing = this.app.vault.getAbstractFileByPath(path);
     if (existing instanceof TFile) return existing;
 
-    // Ensure folder exists
     const folder = this.app.vault.getAbstractFileByPath(this.nodesBasePath);
     if (!folder) await this.app.vault.createFolder(this.nodesBasePath);
 
@@ -417,15 +431,14 @@ export default class DendritePlugin extends Plugin {
         const z = await generateZettelAI(this.app, this.settings, title, parentTitle, subtitle);
         finalSub = z.subtitle; finalBody = z.body; sugs = z.suggestions;
       }
-    } catch {}
+    } catch (_e) { /* keep defaults */ }
     const file = await this.app.vault.create(path, buildZettelContent(title, finalSub, finalBody, sugs));
     this.suggestionsCache.set(path, sugs);
     return file;
   }
 
-  // ─── Canvas Operations ─────────────────────────────────────────
-  async initializeMap() {
-    // Ensure root folder exists
+  // ─── Canvas operations ─────────────────────────────────────────
+  async initializeMap(): Promise<void> {
     if (this.settings.rootFolder) {
       const root = this.app.vault.getAbstractFileByPath(this.settings.rootFolder);
       if (!root) await this.app.vault.createFolder(this.settings.rootFolder);
@@ -440,7 +453,7 @@ export default class DendritePlugin extends Plugin {
       return;
     }
 
-    new Notice("Dendrite: Creating knowledge map...");
+    new Notice("Dendrite: creating knowledge map...");
     const nodeIds: string[] = [], canvasNodes: CanvasNode[] = [];
     for (const seed of SEED_NODES) {
       const path = this.notePath(seed.title);
@@ -451,7 +464,7 @@ export default class DendritePlugin extends Plugin {
             const z = await generateZettelAI(this.app, this.settings, seed.title, "", seed.subtitle);
             sugs = z.suggestions;
           }
-        } catch {}
+        } catch (_e) { /* keep seed defaults */ }
         await this.app.vault.create(path, buildZettelContent(seed.title, seed.subtitle, seed.body, sugs));
         this.suggestionsCache.set(path, sugs);
       }
@@ -462,21 +475,21 @@ export default class DendritePlugin extends Plugin {
       id: generateId(), fromNode: nodeIds[f], toNode: nodeIds[t], fromSide: "bottom", toSide: "top",
     }));
     await this.app.vault.create(this.canvasPath, JSON.stringify({ nodes: canvasNodes, edges }, null, 2));
-    new Notice("Dendrite: Map created!");
+    new Notice("Dendrite: map created!");
     await this.app.workspace.openLinkText(this.canvasPath, "", false);
   }
 
   async readCanvas(): Promise<{ file: TFile; data: CanvasData } | null> {
     const file = this.app.vault.getAbstractFileByPath(this.canvasPath);
-    if (!(file instanceof TFile)) { new Notice("No map. Run 'Initialize knowledge map'."); return null; }
-    return { file, data: JSON.parse(await this.app.vault.read(file)) };
+    if (!(file instanceof TFile)) { new Notice("No map found. Run 'Initialize knowledge map'."); return null; }
+    return { file, data: JSON.parse(await this.app.vault.read(file)) as CanvasData };
   }
 
-  async writeCanvas(file: TFile, data: CanvasData) {
+  async writeCanvas(file: TFile, data: CanvasData): Promise<void> {
     await this.app.vault.modify(file, JSON.stringify(data, null, 2));
   }
 
-  async addFileToCanvasIfMissing(file: TFile, title: string) {
+  async addFileToCanvasIfMissing(file: TFile, title: string): Promise<void> {
     const result = await this.readCanvas(); if (!result) return;
     const { file: cf, data } = result;
     if (data.nodes.some(n => n.type === "file" && n.file === file.path)) return;
@@ -488,7 +501,7 @@ export default class DendritePlugin extends Plugin {
       if (nf instanceof TFile) {
         try {
           if ((await this.app.vault.read(nf)).includes(`[[${title}]]`)) { pn = node; break; }
-        } catch {}
+        } catch (_e) { /* skip unreadable */ }
       }
     }
     const bx = pn ? pn.x : Math.random() * 800 - 400;
@@ -500,9 +513,9 @@ export default class DendritePlugin extends Plugin {
     await this.writeCanvas(cf, data);
   }
 
-  async addNodeToCanvas(pn: CanvasNode, s: Suggestion, cf: TFile, cd: CanvasData) {
+  async addNodeToCanvas(pn: CanvasNode, s: Suggestion, cf: TFile, cd: CanvasData): Promise<void> {
     const pt = this.getNodeTitle(pn);
-    new Notice(`Dendrite: Creating "${s.title}"...`);
+    new Notice(`Dendrite: creating "${s.title}"...`);
     await this.createZettel(s.title, s.subtitle, "", getMockSuggestions(s.title), pt);
     const a = Math.random() * Math.PI * 2, d = 350 + Math.random() * 100, nid = generateId();
     cd.nodes.push({ id: nid, type: "file", file: this.notePath(s.title),
@@ -513,10 +526,10 @@ export default class DendritePlugin extends Plugin {
     await this.app.workspace.openLinkText(this.notePath(s.title), "", false);
   }
 
-  async createAndAddOrphan(file: TFile, s: Suggestion) {
+  async createAndAddOrphan(file: TFile, s: Suggestion): Promise<void> {
     const r = await this.readCanvas(); if (!r) return;
     await this.addNodeToCanvas(
-      { id: "orphan", type: "file", file: file.path, x: 0, y: 0, width: 300, height: 200 } as CanvasNode,
+      { id: "orphan", type: "file", file: file.path, x: 0, y: 0, width: 300, height: 200 },
       s, r.file, r.data
     );
   }
@@ -537,7 +550,7 @@ export default class DendritePlugin extends Plugin {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Settings Tab
+// Settings tab
 // ═══════════════════════════════════════════════════════════════════
 
 class DendriteSettingTab extends PluginSettingTab {
@@ -549,25 +562,22 @@ class DendriteSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("dendrite-settings");
 
-    containerEl.createEl("h2", { text: "Dendrite" });
-    containerEl.createEl("p", { text: "AI-powered knowledge mind mapping for Obsidian.", cls: "dendrite-settings-subtitle" });
-
-    // ─── AI Configuration ────────────────────────────────────────
-    containerEl.createEl("h3", { text: "AI Configuration" });
+    // AI configuration
+    new Setting(containerEl).setName("AI configuration").setHeading();
 
     new Setting(containerEl)
-      .setName("OpenAI API Key")
+      .setName("OpenAI API key")
       .setDesc("Your OpenAI API key for generating content and suggestions. Leave empty to use built-in mock suggestions.")
       .addText((t) => {
         t.inputEl.type = "password";
-        t.inputEl.style.width = "300px";
+        t.inputEl.addClass("dendrite-api-key-input");
         t.setPlaceholder("sk-proj-...")
           .setValue(this.plugin.settings.openaiApiKey)
           .onChange(async (v) => { this.plugin.settings.openaiApiKey = v; await this.plugin.saveSettings(); });
       });
 
     new Setting(containerEl)
-      .setName("OpenAI Model")
+      .setName("OpenAI model")
       .setDesc("Which model to use. GPT-5.2 is recommended as default. GPT-5.4 for highest quality.")
       .addDropdown((d) => {
         for (const m of OPENAI_MODELS) d.addOption(m.value, m.label);
@@ -575,12 +585,12 @@ class DendriteSettingTab extends PluginSettingTab {
           .onChange(async (v) => { this.plugin.settings.openaiModel = v; await this.plugin.saveSettings(); });
       });
 
-    // ─── Folder Structure ────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Folder Structure" });
+    // Folder structure
+    new Setting(containerEl).setName("Folder structure").setHeading();
 
     new Setting(containerEl)
       .setName("Root folder")
-      .setDesc("Base folder for all Dendrite files. Canvas and Nodes folder live inside this. Leave empty for vault root.")
+      .setDesc("Base folder for all Dendrite files. Canvas and nodes folder live inside this. Leave empty for vault root.")
       .addText((t) => t
         .setPlaceholder("Dendrite")
         .setValue(this.plugin.settings.rootFolder)
@@ -602,8 +612,8 @@ class DendriteSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.canvasName)
         .onChange(async (v) => { this.plugin.settings.canvasName = v; await this.plugin.saveSettings(); }));
 
-    // ─── Knowledge Map ───────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Knowledge Map" });
+    // Knowledge map
+    new Setting(containerEl).setName("Knowledge map").setHeading();
 
     const missionSetting = new Setting(containerEl)
       .setName("Mission statement")
@@ -614,16 +624,8 @@ class DendriteSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.mission)
         .onChange(async (v) => { this.plugin.settings.mission = v; await this.plugin.saveSettings(); });
       t.inputEl.rows = 4;
-      t.inputEl.style.width = "100%";
-      t.inputEl.style.minHeight = "100px";
-      t.inputEl.style.resize = "vertical";
+      t.inputEl.addClass("dendrite-mission-textarea");
     });
-
-    // Make mission setting full-width
-    missionSetting.settingEl.style.flexDirection = "column";
-    missionSetting.settingEl.style.alignItems = "flex-start";
-    missionSetting.settingEl.style.gap = "8px";
-    const missionControl = missionSetting.settingEl.querySelector(".setting-item-control") as HTMLElement;
-    if (missionControl) { missionControl.style.width = "100%"; }
+    missionSetting.settingEl.addClass("dendrite-mission-setting");
   }
 }

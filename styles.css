@@ -1,4 +1,4 @@
-/* ─── Suggestion Modal ─────────────────────────────── */
+/* Suggestion modal */
 .dendrite-modal h2 { margin-bottom: 8px; }
 .dendrite-modal h3 { margin-bottom: 6px; }
 .dendrite-suggestions {
@@ -17,12 +17,13 @@
 .dendrite-suggestion strong { color: var(--text-normal); font-size: 0.95em; }
 .dendrite-suggestion span { color: var(--text-muted); font-size: 0.85em; }
 
-/* ─── Custom Input ─────────────────────────────────── */
+/* Custom input */
 .dendrite-custom { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .dendrite-custom label { font-size: 0.85em; color: var(--text-muted); }
 .dendrite-custom-input { width: 100%; }
+.dendrite-custom-input-full { width: 100%; margin-top: 8px; }
 
-/* ─── Status Messages ──────────────────────────────── */
+/* Status messages */
 .dendrite-loading {
   padding: 12px; text-align: center; color: var(--text-muted);
   font-style: italic; font-size: 0.9em;
@@ -34,7 +35,7 @@
   cursor: text; word-break: break-word;
 }
 
-/* ─── Action Buttons ───────────────────────────────── */
+/* Action buttons */
 .dendrite-actions { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .dendrite-action-btn {
   padding: 6px 14px; border-radius: 6px; cursor: pointer;
@@ -44,34 +45,17 @@
 .dendrite-action-btn:hover { opacity: 0.9; }
 .dendrite-action-btn:disabled { opacity: 0.5; cursor: wait; }
 
-/* ─── Settings Page ────────────────────────────────── */
-.dendrite-settings .setting-item {
-  border-top: 1px solid var(--background-modifier-border);
-  padding: 18px 0;
-}
-.dendrite-settings .setting-item:first-child { border-top: none; }
+/* Settings page */
+.dendrite-api-key-input { width: 300px; }
 
-.dendrite-settings h2 {
-  margin-bottom: 4px; font-size: 1.4em;
+.dendrite-mission-setting {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
-.dendrite-settings .dendrite-settings-subtitle {
-  color: var(--text-muted); font-size: 0.9em; margin-bottom: 20px;
-}
-
-.dendrite-settings .setting-item-info {
-  flex: 1 1 auto; min-width: 200px;
-}
-
-/* Make the Mission textarea properly sized */
-.dendrite-settings textarea {
-  width: 100% !important;
-  min-height: 100px !important;
-  resize: vertical !important;
-}
-
-/* Section headers within settings */
-.dendrite-settings h3 {
-  font-size: 1.1em; margin-top: 24px; margin-bottom: 4px;
-  color: var(--text-normal); padding-bottom: 6px;
-  border-bottom: 1px solid var(--background-modifier-border);
+.dendrite-mission-setting .setting-item-control { width: 100%; }
+.dendrite-mission-textarea {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
 }

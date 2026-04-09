@@ -1,4 +1,4 @@
-import { App, TFile, requestUrl } from "obsidian";
+import { App, TFile, requestUrl, RequestUrlResponse } from "obsidian";
 import { Suggestion, DendriteSettings } from "./types";
 
 import PROMPT_SUGGESTIONS from "./prompts/generate-suggestions.md";
@@ -42,14 +42,22 @@ function usesNewTokenParam(model: string): boolean {
   return NEW_PARAM_MODELS.some(m => model.startsWith(m));
 }
 
+interface OpenAIRequestBody {
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  temperature: number;
+  max_completion_tokens?: number;
+  max_tokens?: number;
+}
+
 async function callOpenAI(apiKey: string, model: string, prompt: string): Promise<string> {
   const key = apiKey.trim();
   if (!key) throw new Error("No OpenAI API key configured");
-  const body: any = { model, messages: [{ role: "user", content: prompt }], temperature: 0.8 };
+  const body: OpenAIRequestBody = { model, messages: [{ role: "user", content: prompt }], temperature: 0.8 };
   if (usesNewTokenParam(model)) body.max_completion_tokens = 2000;
   else body.max_tokens = 2000;
 
-  let response;
+  let response: RequestUrlResponse;
   try {
     response = await requestUrl({
       url: "https://api.openai.com/v1/chat/completions",
@@ -57,7 +65,10 @@ async function callOpenAI(apiKey: string, model: string, prompt: string): Promis
       headers: { "Authorization": `Bearer ${key}` },
       body: JSON.stringify(body), throw: false,
     });
-  } catch (err: any) { throw new Error(`Network error: ${err.message || err}`); }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Network error: ${msg}`);
+  }
 
   if (response.status === 401) throw new Error("Invalid API key (401). Check Dendrite settings.");
   if (response.status === 404) throw new Error(`Model "${model}" not found (404).`);
@@ -71,9 +82,9 @@ async function callOpenAI(apiKey: string, model: string, prompt: string): Promis
 
 function parseJSON<T>(raw: string): T | null {
   const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-  try { return JSON.parse(cleaned) as T; } catch {}
-  const m = cleaned.match(/[\[{][\s\S]*[\]}]/);
-  if (m) { try { return JSON.parse(m[0]) as T; } catch {} }
+  try { return JSON.parse(cleaned) as T; } catch (_e) { /* parse failed, try regex */ }
+  const m = cleaned.match(/[{[][^]*[}\]]/);
+  if (m) { try { return JSON.parse(m[0]) as T; } catch (_e) { /* fallback failed */ } }
   return null;
 }
 

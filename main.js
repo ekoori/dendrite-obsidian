@@ -186,7 +186,8 @@ async function callOpenAI(apiKey, model, prompt) {
       throw: false
     });
   } catch (err) {
-    throw new Error(`Network error: ${err.message || err}`);
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Network error: ${msg}`);
   }
   if (response.status === 401) throw new Error("Invalid API key (401). Check Dendrite settings.");
   if (response.status === 404) throw new Error(`Model "${model}" not found (404).`);
@@ -200,13 +201,13 @@ function parseJSON(raw) {
   const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
   try {
     return JSON.parse(cleaned);
-  } catch (e) {
+  } catch (_e) {
   }
-  const m = cleaned.match(/[\[{][\s\S]*[\]}]/);
+  const m = cleaned.match(/[{[][^]*[}\]]/);
   if (m) {
     try {
       return JSON.parse(m[0]);
-    } catch (e) {
+    } catch (_e) {
     }
   }
   return null;
@@ -347,12 +348,11 @@ var SuggestionModal = class extends import_obsidian2.Modal {
     }
     const actionsDiv = contentEl.createDiv({ cls: "dendrite-actions" });
     if (this.plugin.hasApiKey) {
-      const genBtn = actionsDiv.createEl("button", { text: "\u2728 Generate new AI suggestions", cls: "dendrite-action-btn" });
-      genBtn.addEventListener("click", async () => {
+      const genBtn = actionsDiv.createEl("button", { text: "Generate new AI suggestions", cls: "dendrite-action-btn" });
+      genBtn.addEventListener("click", () => {
         genBtn.disabled = true;
         genBtn.setText("Generating...");
-        try {
-          const newSugs = await generateSuggestionsAI(this.plugin.app, this.plugin.settings, this.nodeTitle);
+        generateSuggestionsAI(this.plugin.app, this.plugin.settings, this.nodeTitle).then(async (newSugs) => {
           await this.plugin.mergeSuggestionsIntoFile(this.nodeTitle, newSugs);
           for (const s of newSugs) {
             if (!existingSugs.some((e) => e.title.toLowerCase() === s.title.toLowerCase())) {
@@ -360,11 +360,12 @@ var SuggestionModal = class extends import_obsidian2.Modal {
               existingSugs.push(s);
             }
           }
-          genBtn.setText("\u2728 Generate more");
-        } catch (err) {
+          genBtn.setText("Generate more");
+        }).catch((err) => {
           genBtn.setText(`Error: ${err.message}`);
-        }
-        genBtn.disabled = false;
+        }).finally(() => {
+          genBtn.disabled = false;
+        });
       });
     }
     const customDiv = contentEl.createDiv({ cls: "dendrite-custom" });
@@ -406,9 +407,7 @@ var CustomDirectionModal = class extends import_obsidian2.Modal {
     contentEl.addClass("dendrite-modal");
     contentEl.createEl("h3", { text: `Custom direction from "${this.nodeTitle}"` });
     const input = contentEl.createEl("input", { type: "text", placeholder: "Type and press Enter..." });
-    input.addClass("dendrite-custom-input");
-    input.style.width = "100%";
-    input.style.marginTop = "8px";
+    input.addClasses(["dendrite-custom-input", "dendrite-custom-input-full"]);
     input.focus();
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && input.value.trim()) {
@@ -470,16 +469,24 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
   }
   async onload() {
     await this.loadSettings();
-    this.addCommand({ id: "dendrite-init", name: "Initialize knowledge map", callback: () => this.initializeMap() });
-    this.addCommand({ id: "dendrite-expand", name: "Expand selected node", callback: () => this.expandSelectedNode() });
-    this.addRibbonIcon("brain", "Dendrite: Expand node", () => this.expandSelectedNode());
+    this.addCommand({ id: "init", name: "Initialize knowledge map", callback: () => {
+      void this.initializeMap();
+    } });
+    this.addCommand({ id: "expand", name: "Expand selected node", callback: () => {
+      void this.expandSelectedNode();
+    } });
+    this.addRibbonIcon("brain", "Dendrite: expand node", () => {
+      void this.expandSelectedNode();
+    });
     this.addSettingTab(new DendriteSettingTab(this.app, this));
     this.registerEvent(this.app.vault.on("modify", (file) => {
       if (file instanceof import_obsidian2.TFile && file.path.startsWith(this.nodesBasePath + "/")) {
-        this.cacheSuggestionsForFile(file);
+        void this.cacheSuggestionsForFile(file);
       }
     }));
-    this.app.workspace.onLayoutReady(() => this.cacheAllSuggestions());
+    this.app.workspace.onLayoutReady(() => {
+      void this.cacheAllSuggestions();
+    });
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
         if (!(file instanceof import_obsidian2.TFile) || file.extension !== "md") return;
@@ -487,21 +494,29 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
         const title = file.basename;
         const cached = this.suggestionsCache.get(file.path) || [];
         menu.addItem((item) => {
-          item.setTitle("Dendrite: Expand node").setIcon("brain");
+          item.setTitle("Dendrite: expand node").setIcon("brain");
           const submenu = item.setSubmenu();
           if (cached.length > 0) {
             for (const s of cached) {
               submenu.addItem((sub) => {
-                sub.setTitle(`${s.title} \u2014 ${s.subtitle}`).onClick(() => this.handleSuggestionClick(file, s));
+                sub.setTitle(`${s.title} \u2014 ${s.subtitle}`).onClick(() => {
+                  void this.handleSuggestionClick(file, s);
+                });
               });
             }
             submenu.addSeparator();
           }
           submenu.addItem((sub) => {
-            sub.setTitle("\u2728 Generate new AI suggestions...").setIcon("sparkles").onClick(() => this.expandNodeByFile(file));
+            sub.setTitle("Generate new AI suggestions...").setIcon("sparkles").onClick(() => {
+              this.expandNodeByFile(file);
+            });
           });
           submenu.addItem((sub) => {
-            sub.setTitle("\u270E Write your own direction...").onClick(() => new CustomDirectionModal(this.app, title, (chosen) => this.handleSuggestionClick(file, chosen)).open());
+            sub.setTitle("Write your own direction...").onClick(() => {
+              new CustomDirectionModal(this.app, title, (chosen) => {
+                void this.handleSuggestionClick(file, chosen);
+              }).open();
+            });
           });
         });
       })
@@ -513,7 +528,7 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
         let content;
         try {
           content = await this.app.vault.read(file);
-        } catch (e) {
+        } catch (_e) {
           return;
         }
         if (content.trim().length > 0) return;
@@ -531,7 +546,7 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
               isLinkedFromDendrite = true;
               break;
             }
-          } catch (e) {
+          } catch (_e) {
             continue;
           }
         }
@@ -550,26 +565,27 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
         }
         try {
           if (this.hasApiKey) {
-            new import_obsidian2.Notice(`Dendrite: Generating "${title}"...`);
+            new import_obsidian2.Notice(`Dendrite: generating "${title}"...`);
             const zettel = await generateZettelAI(this.app, this.settings, title, parentTitle, "");
             await this.app.vault.modify(targetFile, buildZettelContent(title, zettel.subtitle, zettel.body, zettel.suggestions));
           } else {
             await this.app.vault.modify(targetFile, buildZettelContent(title, `Expand on: ${title}`, "", getMockSuggestions(title)));
           }
         } catch (err) {
-          new import_obsidian2.Notice(`Dendrite: AI error \u2014 ${err.message}`);
+          const msg = err instanceof Error ? err.message : String(err);
+          new import_obsidian2.Notice(`Dendrite: AI error \u2014 ${msg}`);
           await this.app.vault.modify(targetFile, buildZettelContent(title, `Expand on: ${title}`, "", getMockSuggestions(title)));
         }
         await this.addFileToCanvasIfMissing(targetFile, title);
-        this.cacheSuggestionsForFile(targetFile);
-        new import_obsidian2.Notice(`Dendrite: Created "${title}".`);
+        await this.cacheSuggestionsForFile(targetFile);
+        new import_obsidian2.Notice(`Dendrite: created "${title}".`);
       })
     );
   }
   onunload() {
     this.suggestionsCache.clear();
   }
-  // ─── Suggestions Cache ─────────────────────────────────────────
+  // ─── Suggestions cache ─────────────────────────────────────────
   async cacheAllSuggestions() {
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (!file.path.startsWith(this.nodesBasePath + "/")) continue;
@@ -580,7 +596,7 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
     try {
       const content = await this.app.vault.read(file);
       this.suggestionsCache.set(file.path, parseSuggestionsFromFrontmatter(content));
-    } catch (e) {
+    } catch (_e) {
     }
   }
   async getExistingSuggestions(nodeTitle) {
@@ -614,13 +630,14 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
     if (node) await this.addNodeToCanvas(node, suggestion, result.file, result.data);
     else await this.createAndAddOrphan(file, suggestion);
   }
-  async expandNodeByFile(file) {
-    new SuggestionModal(this.app, file.basename, this, async (chosen) => {
-      const r = await this.readCanvas();
-      if (!r) return;
-      const fn = r.data.nodes.find((n) => n.type === "file" && n.file === file.path);
-      if (fn) await this.addNodeToCanvas(fn, chosen, r.file, r.data);
-      else await this.createAndAddOrphan(file, chosen);
+  expandNodeByFile(file) {
+    new SuggestionModal(this.app, file.basename, this, (chosen) => {
+      void this.readCanvas().then(async (r) => {
+        if (!r) return;
+        const fn = r.data.nodes.find((n) => n.type === "file" && n.file === file.path);
+        if (fn) await this.addNodeToCanvas(fn, chosen, r.file, r.data);
+        else await this.createAndAddOrphan(file, chosen);
+      });
     }).open();
   }
   async expandSelectedNode() {
@@ -628,14 +645,16 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
     if (!r) return;
     const an = this.findActiveNodeInCanvas(r.data);
     if (!an) {
-      new NodePickerModal(this.app, r.data.nodes, this, (n) => this.showSuggestionsForNode(n, r.file, r.data)).open();
+      new NodePickerModal(this.app, r.data.nodes, this, (n) => {
+        this.showSuggestionsForNode(n, r.file, r.data);
+      }).open();
       return;
     }
     this.showSuggestionsForNode(an, r.file, r.data);
   }
   showSuggestionsForNode(node, cf, cd) {
-    new SuggestionModal(this.app, this.getNodeTitle(node), this, async (chosen) => {
-      await this.addNodeToCanvas(node, chosen, cf, cd);
+    new SuggestionModal(this.app, this.getNodeTitle(node), this, (chosen) => {
+      void this.addNodeToCanvas(node, chosen, cf, cd);
     }).open();
   }
   // ─── Settings ──────────────────────────────────────────────────
@@ -660,13 +679,13 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
         finalBody = z.body;
         sugs = z.suggestions;
       }
-    } catch (e) {
+    } catch (_e) {
     }
     const file = await this.app.vault.create(path, buildZettelContent(title, finalSub, finalBody, sugs));
     this.suggestionsCache.set(path, sugs);
     return file;
   }
-  // ─── Canvas Operations ─────────────────────────────────────────
+  // ─── Canvas operations ─────────────────────────────────────────
   async initializeMap() {
     if (this.settings.rootFolder) {
       const root = this.app.vault.getAbstractFileByPath(this.settings.rootFolder);
@@ -680,7 +699,7 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
       await this.app.workspace.openLinkText(this.canvasPath, "", false);
       return;
     }
-    new import_obsidian2.Notice("Dendrite: Creating knowledge map...");
+    new import_obsidian2.Notice("Dendrite: creating knowledge map...");
     const nodeIds = [], canvasNodes = [];
     for (const seed of SEED_NODES) {
       const path = this.notePath(seed.title);
@@ -691,7 +710,7 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
             const z = await generateZettelAI(this.app, this.settings, seed.title, "", seed.subtitle);
             sugs = z.suggestions;
           }
-        } catch (e) {
+        } catch (_e) {
         }
         await this.app.vault.create(path, buildZettelContent(seed.title, seed.subtitle, seed.body, sugs));
         this.suggestionsCache.set(path, sugs);
@@ -708,13 +727,13 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
       toSide: "top"
     }));
     await this.app.vault.create(this.canvasPath, JSON.stringify({ nodes: canvasNodes, edges }, null, 2));
-    new import_obsidian2.Notice("Dendrite: Map created!");
+    new import_obsidian2.Notice("Dendrite: map created!");
     await this.app.workspace.openLinkText(this.canvasPath, "", false);
   }
   async readCanvas() {
     const file = this.app.vault.getAbstractFileByPath(this.canvasPath);
     if (!(file instanceof import_obsidian2.TFile)) {
-      new import_obsidian2.Notice("No map. Run 'Initialize knowledge map'.");
+      new import_obsidian2.Notice("No map found. Run 'Initialize knowledge map'.");
       return null;
     }
     return { file, data: JSON.parse(await this.app.vault.read(file)) };
@@ -737,7 +756,7 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
             pn = node;
             break;
           }
-        } catch (e) {
+        } catch (_e) {
         }
       }
     }
@@ -758,7 +777,7 @@ var DendritePlugin = class extends import_obsidian2.Plugin {
   }
   async addNodeToCanvas(pn, s, cf, cd) {
     const pt = this.getNodeTitle(pn);
-    new import_obsidian2.Notice(`Dendrite: Creating "${s.title}"...`);
+    new import_obsidian2.Notice(`Dendrite: creating "${s.title}"...`);
     await this.createZettel(s.title, s.subtitle, "", getMockSuggestions(s.title), pt);
     const a = Math.random() * Math.PI * 2, d = 350 + Math.random() * 100, nid = generateId();
     cd.nodes.push({
@@ -811,26 +830,24 @@ var DendriteSettingTab = class extends import_obsidian2.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.addClass("dendrite-settings");
-    containerEl.createEl("h2", { text: "Dendrite" });
-    containerEl.createEl("p", { text: "AI-powered knowledge mind mapping for Obsidian.", cls: "dendrite-settings-subtitle" });
-    containerEl.createEl("h3", { text: "AI Configuration" });
-    new import_obsidian2.Setting(containerEl).setName("OpenAI API Key").setDesc("Your OpenAI API key for generating content and suggestions. Leave empty to use built-in mock suggestions.").addText((t) => {
+    new import_obsidian2.Setting(containerEl).setName("AI configuration").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("OpenAI API key").setDesc("Your OpenAI API key for generating content and suggestions. Leave empty to use built-in mock suggestions.").addText((t) => {
       t.inputEl.type = "password";
-      t.inputEl.style.width = "300px";
+      t.inputEl.addClass("dendrite-api-key-input");
       t.setPlaceholder("sk-proj-...").setValue(this.plugin.settings.openaiApiKey).onChange(async (v) => {
         this.plugin.settings.openaiApiKey = v;
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian2.Setting(containerEl).setName("OpenAI Model").setDesc("Which model to use. GPT-5.2 is recommended as default. GPT-5.4 for highest quality.").addDropdown((d) => {
+    new import_obsidian2.Setting(containerEl).setName("OpenAI model").setDesc("Which model to use. GPT-5.2 is recommended as default. GPT-5.4 for highest quality.").addDropdown((d) => {
       for (const m of OPENAI_MODELS) d.addOption(m.value, m.label);
       d.setValue(this.plugin.settings.openaiModel).onChange(async (v) => {
         this.plugin.settings.openaiModel = v;
         await this.plugin.saveSettings();
       });
     });
-    containerEl.createEl("h3", { text: "Folder Structure" });
-    new import_obsidian2.Setting(containerEl).setName("Root folder").setDesc("Base folder for all Dendrite files. Canvas and Nodes folder live inside this. Leave empty for vault root.").addText((t) => t.setPlaceholder("Dendrite").setValue(this.plugin.settings.rootFolder).onChange(async (v) => {
+    new import_obsidian2.Setting(containerEl).setName("Folder structure").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("Root folder").setDesc("Base folder for all Dendrite files. Canvas and nodes folder live inside this. Leave empty for vault root.").addText((t) => t.setPlaceholder("Dendrite").setValue(this.plugin.settings.rootFolder).onChange(async (v) => {
       this.plugin.settings.rootFolder = v;
       await this.plugin.saveSettings();
     }));
@@ -842,7 +859,7 @@ var DendriteSettingTab = class extends import_obsidian2.PluginSettingTab {
       this.plugin.settings.canvasName = v;
       await this.plugin.saveSettings();
     }));
-    containerEl.createEl("h3", { text: "Knowledge Map" });
+    new import_obsidian2.Setting(containerEl).setName("Knowledge map").setHeading();
     const missionSetting = new import_obsidian2.Setting(containerEl).setName("Mission statement").setDesc("The guiding mission for your knowledge map. The AI uses this to suggest meaningful, cross-domain connections.");
     missionSetting.addTextArea((t) => {
       t.setPlaceholder("e.g. Grow my understanding of systems thinking across technology, biology, and philosophy...").setValue(this.plugin.settings.mission).onChange(async (v) => {
@@ -850,16 +867,8 @@ var DendriteSettingTab = class extends import_obsidian2.PluginSettingTab {
         await this.plugin.saveSettings();
       });
       t.inputEl.rows = 4;
-      t.inputEl.style.width = "100%";
-      t.inputEl.style.minHeight = "100px";
-      t.inputEl.style.resize = "vertical";
+      t.inputEl.addClass("dendrite-mission-textarea");
     });
-    missionSetting.settingEl.style.flexDirection = "column";
-    missionSetting.settingEl.style.alignItems = "flex-start";
-    missionSetting.settingEl.style.gap = "8px";
-    const missionControl = missionSetting.settingEl.querySelector(".setting-item-control");
-    if (missionControl) {
-      missionControl.style.width = "100%";
-    }
+    missionSetting.settingEl.addClass("dendrite-mission-setting");
   }
 };
